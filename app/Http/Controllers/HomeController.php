@@ -11,8 +11,7 @@ class HomeController extends Controller
     public function index(Request $request)
     {
         $query = Artwork::with(['user', 'category'])
-            ->available()
-            ->latest();
+            ->available();
 
         // Filter by category
         if ($request->filled('category')) {
@@ -21,10 +20,23 @@ class HomeController extends Controller
 
         // Search
         if ($request->filled('search')) {
-            $query->where(function($q) use ($request) {
+            $query->where(function ($q) use ($request) {
                 $q->where('title', 'like', '%' . $request->search . '%')
-                  ->orWhere('description', 'like', '%' . $request->search . '%');
+                    ->orWhere('description', 'like', '%' . $request->search . '%');
             });
+        }
+
+        // Sort by rating or reviews count
+        if ($request->filled('sort')) {
+            if ($request->sort === 'rating') {
+                $query->orderBy('average_rating', 'desc')->orderBy('reviews_count', 'desc');
+            } elseif ($request->sort === 'reviews') {
+                $query->orderBy('reviews_count', 'desc')->orderBy('average_rating', 'desc');
+            } else {
+                $query->latest();
+            }
+        } else {
+            $query->latest();
         }
 
         $artworks = $query->paginate(12);

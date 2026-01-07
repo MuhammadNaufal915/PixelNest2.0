@@ -83,4 +83,25 @@ class User extends Authenticatable
     {
         return $this->hasOne(Cart::class);
     }
+
+    /**
+     * Get user's reviews
+     */
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /**
+     * Check if user has purchased a specific artwork
+     */
+    public function hasPurchased(Artwork $artwork): bool
+    {
+        return $this->orders()
+            ->where('status', 'paid')
+            ->whereHas('items', function ($query) use ($artwork) {
+                $query->where('artwork_id', $artwork->id);
+            })
+            ->exists();
+    }
 }

@@ -55,6 +55,14 @@ class Order extends Model
     }
 
     /**
+     * Get reviews from this order
+     */
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /**
      * Check if order is paid
      */
     public function isPaid(): bool

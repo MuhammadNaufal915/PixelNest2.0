@@ -21,6 +21,8 @@ class Artwork extends Model
         'status',
         'is_active',
         'downloads_count',
+        'average_rating',
+        'reviews_count',
     ];
 
     protected $casts = [
@@ -51,6 +53,25 @@ class Artwork extends Model
     public function orderItems()
     {
         return $this->hasMany(OrderItem::class);
+    }
+
+    /**
+     * Get reviews for this artwork
+     */
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /**
+     * Update rating cache from reviews
+     */
+    public function updateRatingCache()
+    {
+        $this->update([
+            'average_rating' => $this->reviews()->avg('rating'),
+            'reviews_count' => $this->reviews()->count(),
+        ]);
     }
 
     /**
