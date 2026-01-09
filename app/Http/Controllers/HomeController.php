@@ -28,12 +28,21 @@ class HomeController extends Controller
 
         // Sort by rating or reviews count
         if ($request->filled('sort')) {
-            if ($request->sort === 'rating') {
-                $query->orderBy('average_rating', 'desc')->orderBy('reviews_count', 'desc');
-            } elseif ($request->sort === 'reviews') {
-                $query->orderBy('reviews_count', 'desc')->orderBy('average_rating', 'desc');
-            } else {
-                $query->latest();
+            switch ($request->sort) {
+                case 'rating':
+                    $query->orderBy('average_rating', 'desc')->orderBy('reviews_count', 'desc');
+                    break;
+                case 'reviews':
+                    $query->orderBy('reviews_count', 'desc')->orderBy('average_rating', 'desc');
+                    break;
+                case 'price_low':
+                    $query->orderBy('price', 'asc');
+                    break;
+                case 'price_high':
+                    $query->orderBy('price', 'desc');
+                    break;
+                default:
+                    $query->latest();
             }
         } else {
             $query->latest();

@@ -47,17 +47,26 @@
 
         /* Navigation */
         .navbar {
-            background: var(--white);
-            box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
             position: sticky;
-            top: 0;
+            top: 1.5rem;
             z-index: 1000;
+            margin: 0 auto 3rem auto;
+            width: 95%;
+            max-width: 1280px;
+            border-radius: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.4);
+            transition: all 0.3s ease;
         }
+        
+        /* Scroll effect can be added via JS later, for now we stick to initial state */
 
         .nav-container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 1rem 2rem;
+            width: 100%;
+            padding: 0.75rem 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -70,6 +79,9 @@
             -webkit-background-clip: text;
             -webkit-text-fill-color: transparent;
             text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
         }
 
         .nav-links {
@@ -81,17 +93,37 @@
 
         .nav-links a {
             text-decoration: none;
-            color: var(--dark);
-            font-weight: 500;
+            color: var(--dark-light);
+            font-weight: 600;
+            font-size: 0.95rem;
             transition: color 0.3s;
+            position: relative;
         }
 
         .nav-links a:hover {
             color: var(--primary);
         }
+        
+        /* Interactive dot on hover */
+        .nav-links a::after {
+            content: '';
+            position: absolute;
+            bottom: -4px;
+            left: 50%;
+            width: 0;
+            height: 4px;
+            background: var(--primary);
+            border-radius: 50%;
+            transform: translateX(-50%);
+            transition: width 0.3s;
+        }
+        
+        .nav-links a:hover::after {
+            width: 4px;
+        }
 
         .btn {
-            padding: 0.5rem 1.5rem;
+            padding: 0.5rem 1.25rem;
             border-radius: 0.5rem;
             font-weight: 600;
             text-decoration: none;
@@ -99,22 +131,48 @@
             border: none;
             cursor: pointer;
             display: inline-block;
+            font-size: 0.95rem;
         }
 
         .btn-primary {
             background: var(--gradient);
             color: var(--white);
+            box-shadow: 0 4px 6px -1px rgba(99, 102, 241, 0.4);
         }
 
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.5);
         }
 
         .btn-outline {
             border: 2px solid var(--primary);
             color: var(--primary);
             background: transparent;
+        }
+        
+        /* Nav specific buttons */
+        .btn-nav-ghost {
+            background: transparent;
+            color: var(--dark);
+            padding: 0.5rem 1rem;
+        }
+        
+        .btn-nav-ghost:hover {
+            color: var(--primary);
+        }
+
+        .btn-nav-pill {
+            background: var(--gradient);
+            color: white;
+            border-radius: 9999px;
+            padding: 0.6rem 2rem;
+            box-shadow: 0 4px 10px rgba(99, 102, 241, 0.3);
+        }
+        
+        .btn-nav-pill:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 15px rgba(99, 102, 241, 0.4);
         }
 
         /* Container */
@@ -193,7 +251,20 @@
     <!-- Navigation -->
     <nav class="navbar">
         <div class="nav-container">
-            <a href="{{ route('home') }}" class="logo">PixelNest</a>
+            <a href="{{ route('home') }}" class="logo">
+                <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect width="40" height="40" rx="12" fill="url(#logo_gradient)"/>
+                    <path d="M20 12C15.5817 12 12 15.5817 12 20C12 24.4183 15.5817 28 20 28C24.4183 28 28 24.4183 28 20C28 15.5817 24.4183 12 20 12ZM20 25C17.2386 25 15 22.7614 15 20C15 17.2386 17.2386 15 20 15C22.7614 15 25 17.2386 25 20C25 22.7614 22.7614 25 20 25Z" fill="white"/>
+                    <circle cx="26" cy="14" r="4" fill="#F472B6"/>
+                    <defs>
+                        <linearGradient id="logo_gradient" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+                            <stop stop-color="#4F46E5"/>
+                            <stop offset="1" stop-color="#EC4899"/>
+                        </linearGradient>
+                    </defs>
+                </svg>
+                PixelNest
+            </a>
             
             <ul class="nav-links">
                 <li><a href="{{ route('home') }}">Explore</a></li>
@@ -213,8 +284,8 @@
                         </form>
                     </li>
                 @else
-                    <li><a href="{{ route('login') }}" class="btn btn-outline">Login</a></li>
-                    <li><a href="{{ route('register') }}" class="btn btn-primary">Sign Up</a></li>
+                    <li><a href="{{ route('login') }}" class="btn btn-nav-ghost">Login</a></li>
+                    <li><a href="{{ route('register') }}" class="btn btn-nav-pill">Sign Up</a></li>
                 @endauth
             </ul>
         </div>
