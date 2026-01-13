@@ -4,27 +4,23 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller;
 use App\Models\Artwork;
-use App\Models\Order;
-use Illuminate\Http\Request;
+use App\Models\Category;
 
 class DashboardController extends Controller
 {
     public function index()
     {
-        $user = auth()->user();
+        // Get artworks with relationships (same as welcome page)
+        $artworks = Artwork::with(['user', 'category'])
+            ->where('status', 'approved')
+            ->where('is_active', true)
+            ->latest()
+            ->take(12)
+            ->get();
         
-        $stats = [
-            'total_artworks' => $user->artworks()->count(),
-            'approved_artworks' => $user->artworks()->where('status', 'approved')->count(),
-            'total_sales' => Order::whereHas('items.artwork', function($q) use ($user) {
-                $q->where('user_id', $user->id);
-            })->where('status', 'paid')->sum('total_amount'),
-            'total_purchases' => $user->orders()->where('status', 'paid')->count(),
-        ];
+        // Get categories with artwork count (same as welcome page)
+        $categories = Category::withCount('artworks')->get();
 
-        $recentArtworks = $user->artworks()->latest()->limit(5)->get();
-        $recentOrders = $user->orders()->latest()->limit(5)->get();
-
-        return view('user.dashboard', compact('stats', 'recentArtworks', 'recentOrders'));
+        return view('user.dashboard', compact('artworks', 'categories'));
     }
 }

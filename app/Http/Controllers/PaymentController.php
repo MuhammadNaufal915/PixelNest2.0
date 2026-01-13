@@ -2,112 +2,74 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Artwork;
 use App\Models\Order;
+use App\Models\OrderItem;
 use Illuminate\Http\Request;
-use Midtrans\Config;
-use Midtrans\Snap;
-use Midtrans\Notification;
 
 class PaymentController extends Controller
 {
-    public function __construct()
+    public function index()
     {
-        // Set Midtrans configuration
-        Config::$serverKey = config('midtrans.server_key');
-        Config::$isProduction = config('midtrans.is_production');
-        Config::$isSanitized = config('midtrans.is_sanitized');
-        Config::$is3ds = config('midtrans.is_3ds');
+        $cart = auth()->user()->cart;
+        
+        if (!$cart || $cart->items->count() === 0) {
+            return redirect()->route('cart.index')->with('error', 'Your cart is empty.');
+        }
+
+        $cartItems = $cart->items->map(function($item) {
+            return $item->artwork;
+        });
+        $total = $cartItems->sum('price');
+
+        return view('payment.index', compact('total'));
     }
 
-    public function show(Order $order)
+    public function process(Request $request)
     {
-        // Check ownership
-        if ($order->user_id !== auth()->id()) {
-            abort(403);
+        $request->validate([
+            'payment_method' => 'required|in:credit_card,paypal,bank_transfer,qris',
+        ]);
+
+        $cart = auth()->user()->cart;
+        
+        if (!$cart || $cart->items->count() === 0) {
+            return redirect()->route('cart.index')->with('error', 'Your cart is empty.');
         }
 
-        // Check if already paid
-        if ($order->isPaid()) {
-            return redirect()->route('user.orders.show', $order)
-                ->with('info', 'This order has already been paid.');
-        }
+        $cartItems = $cart->items->map(function($item) {
+            return $item->artwork;
+        });
+        $total = $cartItems->sum('price');
 
-        // Prepare transaction details
-        $params = [
-            'transaction_details' => [
-                'order_id' => $order->order_number,
-                'gross_amount' => (int) $order->total_amount,
+        // Create Order
+        $order = Order::create([
+            'user_id' => auth()->id(),
+            'order_number' => 'ORD-' . strtoupper(uniqid()),
+            'total_amount' => $total,
+            'status' => 'paid',
+            'payment_method' => $request->payment_method,
+            'payment_details' => [
+                'transaction_id' => 'TXN-' . strtoupper(uniqid()),
+                'payment_date' => now()->toDateTimeString(),
             ],
-            'customer_details' => [
-                'first_name' => $order->user->name,
-                'email' => $order->user->email,
-            ],
-            'item_details' => $order->items->map(function($item) {
-                return [
-                    'id' => $item->artwork_id,
-                    'price' => (int) $item->price,
-                    'quantity' => 1,
-                    'name' => $item->artwork->title,
-                ];
-            })->toArray(),
-        ];
+        ]);
 
-        try {
-            $snapToken = Snap::getSnapToken($params);
-            return view('payment.index', compact('order', 'snapToken'));
-        } catch (\Exception $e) {
-            return back()->with('error', 'Failed to initiate payment: ' . $e->getMessage());
-        }
-    }
+        // Create Order Items
+        foreach ($cartItems as $artwork) {
+            OrderItem::create([
+                'order_id' => $order->id,
+                'artwork_id' => $artwork->id,
+                'price' => $artwork->price,
+            ]);
 
-    public function callback(Request $request)
-    {
-        try {
-            $notification = new Notification();
-
-            $transactionStatus = $notification->transaction_status;
-            $orderNumber = $notification->order_id;
-            $fraudStatus = $notification->fraud_status;
-
-            $order = Order::where('order_number', $orderNumber)->firstOrFail();
-
-            $paymentDetails = [
-                'transaction_id' => $notification->transaction_id,
-                'transaction_status' => $transactionStatus,
-                'payment_type' => $notification->payment_type,
-                'transaction_time' => $notification->transaction_time,
-            ];
-
-            if ($transactionStatus == 'capture') {
-                if ($fraudStatus == 'accept') {
-                    $order->markAsPaid($paymentDetails);
-                }
-            } elseif ($transactionStatus == 'settlement') {
-                $order->markAsPaid($paymentDetails);
-            } elseif ($transactionStatus == 'cancel' || $transactionStatus == 'deny' || $transactionStatus == 'expire') {
-                $order->markAsFailed($paymentDetails);
-            } elseif ($transactionStatus == 'pending') {
-                $order->update(['payment_details' => $paymentDetails]);
-            }
-
-            return response()->json(['status' => 'success']);
-
-        } catch (\Exception $e) {
-            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
-        }
-    }
-
-    public function finish(Request $request)
-    {
-        $orderNumber = $request->order_id;
-        $order = Order::where('order_number', $orderNumber)->first();
-
-        if ($order && $order->user_id === auth()->id()) {
-            return redirect()->route('user.orders.show', $order)
-                ->with('success', 'Payment completed! Check your order status.');
+            // Increment downloads
+            $artwork->increment('downloads_count');
         }
 
-        return redirect()->route('user.orders.index')
-            ->with('info', 'Payment process completed.');
+        // Clear cart
+        $cart->items()->delete();
+
+        return redirect()->route('user.orders.show', $order)->with('success', 'Payment successful! You can now download your artworks.');
     }
 }
