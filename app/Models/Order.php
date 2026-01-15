@@ -39,4 +39,9 @@ class Order extends Model
     {
         return $this->status === 'pending';
     }
+
+    public function payment()
+    {
+        return $this->hasOne(Payment::class);
+    }
 }
