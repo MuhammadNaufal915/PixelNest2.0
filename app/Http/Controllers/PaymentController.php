@@ -2,112 +2,210 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Artwork;
 use App\Models\Order;
+use App\Models\OrderItem;
+use App\Models\Payment;
+use App\Services\MidtransService;
 use Illuminate\Http\Request;
-use Midtrans\Config;
-use Midtrans\Snap;
-use Midtrans\Notification;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class PaymentController extends Controller
 {
-    public function __construct()
+    protected $midtransService;
+
+    public function __construct(MidtransService $midtransService)
     {
-        // Set Midtrans configuration
-        Config::$serverKey = config('midtrans.server_key');
-        Config::$isProduction = config('midtrans.is_production');
-        Config::$isSanitized = config('midtrans.is_sanitized');
-        Config::$is3ds = config('midtrans.is_3ds');
+        $this->midtransService = $midtransService;
     }
 
-    public function show(Order $order)
+    /**
+     * Display payment page
+     */
+    public function index()
     {
-        // Check ownership
-        if ($order->user_id !== auth()->id()) {
-            abort(403);
+        $cart = auth()->user()->cart;
+        
+        if (!$cart || $cart->items->count() === 0) {
+            return redirect()->route('cart.index')->with('error', 'Your cart is empty.');
         }
 
-        // Check if already paid
-        if ($order->isPaid()) {
-            return redirect()->route('user.orders.show', $order)
-                ->with('info', 'This order has already been paid.');
-        }
+        $cartItems = $cart->items->map(function($item) {
+            return $item->artwork;
+        });
+        $total = $cartItems->sum('price');
 
-        // Prepare transaction details
-        $params = [
-            'transaction_details' => [
-                'order_id' => $order->order_number,
-                'gross_amount' => (int) $order->total_amount,
-            ],
-            'customer_details' => [
-                'first_name' => $order->user->name,
-                'email' => $order->user->email,
-            ],
-            'item_details' => $order->items->map(function($item) {
-                return [
-                    'id' => $item->artwork_id,
-                    'price' => (int) $item->price,
-                    'quantity' => 1,
-                    'name' => $item->artwork->title,
-                ];
-            })->toArray(),
-        ];
-
-        try {
-            $snapToken = Snap::getSnapToken($params);
-            return view('payment.index', compact('order', 'snapToken'));
-        } catch (\Exception $e) {
-            return back()->with('error', 'Failed to initiate payment: ' . $e->getMessage());
-        }
+        return view('payment.index', compact('total', 'cartItems'));
     }
 
-    public function callback(Request $request)
+    /**
+     * Process payment - Create order and get Snap token
+     */
+    public function process(Request $request)
     {
         try {
-            $notification = new Notification();
+            DB::beginTransaction();
 
-            $transactionStatus = $notification->transaction_status;
-            $orderNumber = $notification->order_id;
-            $fraudStatus = $notification->fraud_status;
-
-            $order = Order::where('order_number', $orderNumber)->firstOrFail();
-
-            $paymentDetails = [
-                'transaction_id' => $notification->transaction_id,
-                'transaction_status' => $transactionStatus,
-                'payment_type' => $notification->payment_type,
-                'transaction_time' => $notification->transaction_time,
-            ];
-
-            if ($transactionStatus == 'capture') {
-                if ($fraudStatus == 'accept') {
-                    $order->markAsPaid($paymentDetails);
-                }
-            } elseif ($transactionStatus == 'settlement') {
-                $order->markAsPaid($paymentDetails);
-            } elseif ($transactionStatus == 'cancel' || $transactionStatus == 'deny' || $transactionStatus == 'expire') {
-                $order->markAsFailed($paymentDetails);
-            } elseif ($transactionStatus == 'pending') {
-                $order->update(['payment_details' => $paymentDetails]);
+            $cart = auth()->user()->cart;
+            
+            if (!$cart || $cart->items->count() === 0) {
+                return redirect()->route('cart.index')->with('error', 'Your cart is empty.');
             }
 
-            return response()->json(['status' => 'success']);
+            $cartItems = $cart->items->map(function($item) {
+                return $item->artwork;
+            });
+            $total = $cartItems->sum('price');
+
+            // Create Order with pending status
+            $order = Order::create([
+                'user_id' => auth()->id(),
+                'order_number' => 'ORD-' . strtoupper(uniqid()),
+                'total_amount' => $total,
+                'status' => 'pending',
+                'payment_method' => null,
+            ]);
+
+            // Create Order Items
+            foreach ($cartItems as $artwork) {
+                OrderItem::create([
+                    'order_id' => $order->id,
+                    'artwork_id' => $artwork->id,
+                    'price' => $artwork->price,
+                ]);
+            }
+
+            // Get Snap Token from Midtrans
+            $snapToken = $this->midtransService->createSnapToken($order);
+
+            // Create Payment record
+            $payment = Payment::create([
+                'order_id' => $order->id,
+                'payment_method' => 'midtrans',
+                'transaction_id' => $order->order_number,
+                'snap_token' => $snapToken,
+                'amount' => $total,
+                'status' => 'pending',
+            ]);
+
+            // Clear cart
+            $cart->items()->delete();
+
+            DB::commit();
+
+            return view('payment.snap', [
+                'snapToken' => $snapToken,
+                'order' => $order,
+                'clientKey' => config('services.midtrans.client_key'),
+            ]);
 
         } catch (\Exception $e) {
-            return response()->json(['status' => 'error', 'message' => $e->getMessage()], 500);
+            DB::rollBack();
+            Log::error('Payment process error: ' . $e->getMessage());
+            return redirect()->route('payment.index')->with('error', 'Failed to process payment: ' . $e->getMessage());
         }
     }
 
-    public function finish(Request $request)
+    /**
+     * Handle Midtrans notification/callback
+     */
+    public function notification(Request $request)
     {
-        $orderNumber = $request->order_id;
-        $order = Order::where('order_number', $orderNumber)->first();
+        try {
+            $notificationData = $this->midtransService->handleNotification();
+            
+            // Find order by order_number
+            $order = Order::where('order_number', $notificationData['order_id'])->first();
+            
+            if (!$order) {
+                return response()->json(['message' => 'Order not found'], 404);
+            }
 
-        if ($order && $order->user_id === auth()->id()) {
-            return redirect()->route('user.orders.show', $order)
-                ->with('success', 'Payment completed! Check your order status.');
+            // Update payment record
+            $payment = $order->payment;
+            if ($payment) {
+                $payment->update([
+                    'transaction_id' => $notificationData['transaction_id'],
+                    'payment_method' => $notificationData['payment_type'],
+                    'status' => $this->midtransService->getPaymentStatus(
+                        $notificationData['transaction_status'], 
+                        $notificationData['fraud_status']
+                    ),
+                    'fraud_status' => $notificationData['fraud_status'],
+                    'raw_response' => $notificationData['raw_response'],
+                ]);
+            }
+
+            // Update order status
+            $orderStatus = $this->midtransService->getOrderStatus(
+                $notificationData['transaction_status'], 
+                $notificationData['fraud_status']
+            );
+            
+            $order->update([
+                'status' => $orderStatus,
+                'payment_method' => $notificationData['payment_type'],
+                'payment_details' => $notificationData['raw_response'],
+            ]);
+
+            // If payment is successful, increment download counts
+            if ($orderStatus === 'paid') {
+                foreach ($order->items as $item) {
+                    $item->artwork->increment('downloads_count');
+                }
+            }
+
+            return response()->json(['message' => 'Notification processed successfully']);
+
+        } catch (\Exception $e) {
+            Log::error('Notification error: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to process notification'], 500);
+        }
+    }
+
+    /**
+     * Payment success page
+     */
+    public function success(Request $request)
+    {
+        $orderId = $request->query('order_id');
+        $order = Order::where('order_number', $orderId)->first();
+
+        if (!$order) {
+            return redirect()->route('home')->with('error', 'Order not found');
         }
 
-        return redirect()->route('user.orders.index')
-            ->with('info', 'Payment process completed.');
+        return view('payment.success', compact('order'));
+    }
+
+    /**
+     * Payment pending page
+     */
+    public function pending(Request $request)
+    {
+        $orderId = $request->query('order_id');
+        $order = Order::where('order_number', $orderId)->first();
+
+        if (!$order) {
+            return redirect()->route('home')->with('error', 'Order not found');
+        }
+
+        return view('payment.pending', compact('order'));
+    }
+
+    /**
+     * Payment failed page
+     */
+    public function failed(Request $request)
+    {
+        $orderId = $request->query('order_id');
+        $order = Order::where('order_number', $orderId)->first();
+
+        if (!$order) {
+            return redirect()->route('home')->with('error', 'Order not found');
+        }
+
+        return view('payment.failed', compact('order'));
     }
 }

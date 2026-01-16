@@ -2,14 +2,10 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 
 class Order extends Model
 {
-    use HasFactory;
-
     protected $fillable = [
         'user_id',
         'order_number',
@@ -24,36 +20,17 @@ class Order extends Model
         'payment_details' => 'array',
     ];
 
-    /**
-     * Boot the model
-     */
-    protected static function boot()
-    {
-        parent::boot();
-
-        static::creating(function ($order) {
-            if (empty($order->order_number)) {
-                $order->order_number = 'PN-' . strtoupper(Str::random(10));
-            }
-        });
-    }
-
-    /**
-     * Get the user who placed this order
-     */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Get order items
-     */
     public function items()
     {
         return $this->hasMany(OrderItem::class);
     }
 
+<<<<<<< HEAD
     /**
      * Get reviews from this order
      */
@@ -66,37 +43,20 @@ class Order extends Model
      * Check if order is paid
      */
     public function isPaid(): bool
+=======
+    public function isPaid()
+>>>>>>> 6c9d1f181de761f38531d11c96559cf0ad585280
     {
         return $this->status === 'paid';
     }
 
-    /**
-     * Check if order is pending
-     */
-    public function isPending(): bool
+    public function isPending()
     {
         return $this->status === 'pending';
     }
 
-    /**
-     * Mark order as paid
-     */
-    public function markAsPaid(array $paymentDetails = [])
+    public function payment()
     {
-        $this->update([
-            'status' => 'paid',
-            'payment_details' => $paymentDetails,
-        ]);
-    }
-
-    /**
-     * Mark order as failed
-     */
-    public function markAsFailed(array $paymentDetails = [])
-    {
-        $this->update([
-            'status' => 'failed',
-            'payment_details' => $paymentDetails,
-        ]);
+        return $this->hasOne(Payment::class);
     }
 }

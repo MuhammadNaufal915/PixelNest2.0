@@ -2,13 +2,12 @@
 
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Artwork extends Model
 {
-    use HasFactory, SoftDeletes;
+    use SoftDeletes;
 
     protected $fillable = [
         'user_id',
@@ -31,30 +30,22 @@ class Artwork extends Model
         'downloads_count' => 'integer',
     ];
 
-    /**
-     * Get the user who uploaded this artwork
-     */
     public function user()
     {
         return $this->belongsTo(User::class);
     }
 
-    /**
-     * Get the category of this artwork
-     */
     public function category()
     {
         return $this->belongsTo(Category::class);
     }
 
-    /**
-     * Get order items for this artwork
-     */
     public function orderItems()
     {
         return $this->hasMany(OrderItem::class);
     }
 
+<<<<<<< HEAD
     /**
      * Get reviews for this artwork
      */
@@ -78,47 +69,25 @@ class Artwork extends Model
      * Scope for approved artworks
      */
     public function scopeApproved($query)
+=======
+    public function cartItems()
+>>>>>>> 6c9d1f181de761f38531d11c96559cf0ad585280
     {
-        return $query->where('status', 'approved');
+        return $this->hasMany(CartItem::class);
     }
 
-    /**
-     * Scope for active artworks
-     */
-    public function scopeActive($query)
+    public function isApproved()
     {
-        return $query->where('is_active', true);
+        return $this->status === 'approved';
     }
 
-    /**
-     * Scope for available artworks (approved and active)
-     */
-    public function scopeAvailable($query)
+    public function isPending()
     {
-        return $query->approved()->active();
+        return $this->status === 'pending';
     }
 
-    /**
-     * Get full image URL
-     */
-    public function getImageUrlAttribute()
+    public function isRejected()
     {
-        return asset('storage/' . $this->image_path);
-    }
-
-    /**
-     * Get full file URL
-     */
-    public function getFileUrlAttribute()
-    {
-        return asset('storage/' . $this->file_path);
-    }
-
-    /**
-     * Increment downloads count
-     */
-    public function incrementDownloads()
-    {
-        $this->increment('downloads_count');
+        return $this->status === 'rejected';
     }
 }

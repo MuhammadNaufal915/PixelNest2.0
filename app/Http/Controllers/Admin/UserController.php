@@ -5,12 +5,16 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use Illuminate\Http\Request;
+<<<<<<< HEAD
 use Illuminate\Support\Facades\Hash;
+=======
+>>>>>>> 6c9d1f181de761f38531d11c96559cf0ad585280
 
 class UserController extends Controller
 {
     public function index()
     {
+<<<<<<< HEAD
         $users = User::latest()->paginate(20);
         return view('admin.users.index', compact('users'));
     }
@@ -83,3 +87,13 @@ class UserController extends Controller
             ->with('success', 'User deleted successfully!');
     }
 }
+=======
+        $users = User::where('role', 'user')
+            ->withCount('artworks')
+            ->latest()
+            ->paginate(15);
+        
+        return view('admin.users.index', compact('users'));
+    }
+}
+>>>>>>> 6c9d1f181de761f38531d11c96559cf0ad585280

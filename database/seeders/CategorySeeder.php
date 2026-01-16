@@ -43,10 +43,43 @@ class CategorySeeder extends Seeder
                 'slug' => 'brand-identity',
                 'description' => 'Complete brand identity packages',
             ],
+            [
+                'name' => 'Photography',
+                'slug' => 'photography',
+                'description' => 'Professional photography and photo editing',
+            ],
+            [
+                'name' => '3D Design',
+                'slug' => '3d-design',
+                'description' => '3D modeling, rendering, and animation',
+            ],
+            [
+                'name' => 'Animation',
+                'slug' => 'animation',
+                'description' => 'Motion graphics and animated content',
+            ],
+            [
+                'name' => 'Web Design',
+                'slug' => 'web-design',
+                'description' => 'Website layouts and landing page designs',
+            ],
+            [
+                'name' => 'Icon Design',
+                'slug' => 'icon-design',
+                'description' => 'Custom icon sets and icon packs',
+            ],
+            [
+                'name' => 'Pattern Design',
+                'slug' => 'pattern-design',
+                'description' => 'Seamless patterns and textures',
+            ],
         ];
 
         foreach ($categories as $category) {
-            Category::create($category);
+            Category::firstOrCreate(
+                ['slug' => $category['slug']], // Check by slug
+                $category // Create with all data if not exists
+            );
         }
     }
 }

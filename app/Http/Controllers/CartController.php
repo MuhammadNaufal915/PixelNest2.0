@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\Artwork;
 use App\Models\Cart;
 use App\Models\CartItem;
-use App\Models\Artwork;
 use Illuminate\Http\Request;
 
 class CartController extends Controller
@@ -13,46 +13,92 @@ class CartController extends Controller
     {
         $cart = auth()->user()->cart()->with('items.artwork.user')->first();
         
-        return view('cart.index', compact('cart'));
+        if (!$cart) {
+            $cartItems = collect();
+            $total = 0;
+        } else {
+            $cartItems = $cart->items->map(function($item) {
+                return $item->artwork;
+            });
+            $total = $cartItems->sum('price');
+        }
+
+        return view('cart.index', compact('cartItems', 'total'));
     }
 
     public function add(Request $request, Artwork $artwork)
     {
-        // Check if artwork is available
-        if ($artwork->status !== 'approved' || !$artwork->is_active) {
-            return back()->with('error', 'This artwork is not available for purchase.');
-        }
-
-        // Don't allow buying own artwork
-        if ($artwork->user_id === auth()->id()) {
-            return back()->with('error', 'You cannot purchase your own artwork.');
+        if (!auth()->user()->can('purchase-artwork', $artwork)) {
+            return back()->with('error', 'You cannot purchase this artwork.');
         }
 
         // Get or create cart
-        $cart = auth()->user()->cart()->firstOrCreate(['user_id' => auth()->id()]);
+        $cart = auth()->user()->cart()->firstOrCreate([
+            'user_id' => auth()->id()
+        ]);
 
         // Check if already in cart
-        $existingItem = $cart->items()->where('artwork_id', $artwork->id)->first();
-        
-        if ($existingItem) {
-            return back()->with('info', 'This artwork is already in your cart.');
+        $exists = CartItem::where('cart_id', $cart->id)
+            ->where('artwork_id', $artwork->id)
+            ->exists();
+
+        if ($exists) {
+            return back()->with('info', 'Artwork already in cart.');
         }
 
-        // Add to cart
-        $cart->items()->create(['artwork_id' => $artwork->id]);
+        CartItem::create([
+            'cart_id' => $cart->id,
+            'artwork_id' => $artwork->id,
+        ]);
 
         return back()->with('success', 'Artwork added to cart!');
     }
 
-    public function remove(CartItem $cartItem)
+    public function buyNow(Request $request, Artwork $artwork)
     {
-        // Check ownership
-        if ($cartItem->cart->user_id !== auth()->id()) {
-            abort(403);
+        if (!auth()->user()->can('purchase-artwork', $artwork)) {
+            return back()->with('error', 'You cannot purchase this artwork.');
         }
 
-        $cartItem->delete();
+        $cart = auth()->user()->cart()->firstOrCreate([
+            'user_id' => auth()->id()
+        ]);
 
-        return back()->with('success', 'Item removed from cart!');
+        $exists = CartItem::where('cart_id', $cart->id)
+            ->where('artwork_id', $artwork->id)
+            ->exists();
+
+        if (!$exists) {
+            CartItem::create([
+                'cart_id' => $cart->id,
+                'artwork_id' => $artwork->id,
+            ]);
+        }
+
+        return redirect()->route('checkout.index');
+    }
+
+    public function remove($id)
+    {
+        $cart = auth()->user()->cart;
+        
+        if ($cart) {
+            CartItem::where('cart_id', $cart->id)
+                ->where('artwork_id', $id)
+                ->delete();
+        }
+
+        return back()->with('success', 'Artwork removed from cart.');
+    }
+
+    public function clear()
+    {
+        $cart = auth()->user()->cart;
+        
+        if ($cart) {
+            $cart->items()->delete();
+        }
+
+        return back()->with('success', 'Cart cleared.');
     }
 }
