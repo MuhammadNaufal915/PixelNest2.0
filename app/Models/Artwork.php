@@ -20,6 +20,8 @@ class Artwork extends Model
         'status',
         'is_active',
         'downloads_count',
+        'average_rating',
+        'reviews_count',
     ];
 
     protected $casts = [
@@ -43,7 +45,33 @@ class Artwork extends Model
         return $this->hasMany(OrderItem::class);
     }
 
+<<<<<<< HEAD
+    /**
+     * Get reviews for this artwork
+     */
+    public function reviews()
+    {
+        return $this->hasMany(Review::class);
+    }
+
+    /**
+     * Update rating cache from reviews
+     */
+    public function updateRatingCache()
+    {
+        $this->update([
+            'average_rating' => $this->reviews()->avg('rating'),
+            'reviews_count' => $this->reviews()->count(),
+        ]);
+    }
+
+    /**
+     * Scope for approved artworks
+     */
+    public function scopeApproved($query)
+=======
     public function cartItems()
+>>>>>>> 6c9d1f181de761f38531d11c96559cf0ad585280
     {
         return $this->hasMany(CartItem::class);
     }
