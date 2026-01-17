@@ -20,6 +20,8 @@ class Artwork extends Model
         'status',
         'is_active',
         'downloads_count',
+        'average_rating',
+        'reviews_count',
     ];
 
     protected $casts = [
